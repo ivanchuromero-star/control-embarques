@@ -18,35 +18,8 @@ def get_conn():
 # =========================
 def init_db():
     with get_conn() as conn:
-        conn.execute("""
-        CREATE TABLE IF NOT EXISTS embarques (
-            embarque_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            factura TEXT,
-            tracking TEXT,
-            bl TEXT,
-            booking TEXT,
-            status TEXT,
-            proveedor TEXT,
-            po TEXT,
-            cliente TEXT,
-            agente_aduanal TEXT,
-            ref_agente TEXT,
-            naviera TEXT,
-            eta_veracruz TEXT,
-            ven_demoras TEXT,
-            pedimento TEXT,
-            contenedores TEXT,
-            sol_impuestos TEXT,
-            pago_impuestos TEXT,
-            carga_gondola TEXT,
-            pantaco TEXT,
-            ven_dem_pantaco TEXT,
-            orden_compra TEXT,
-            transporte_um TEXT,
-            llegada_losifra TEXT,
-            avance REAL DEFAULT 0
-        )
-        """)
+    conn.execute("DELETE FROM embarques")
+    
         conn.commit()
 
 
