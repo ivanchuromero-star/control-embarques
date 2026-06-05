@@ -106,7 +106,14 @@ def load_excel(file):
 # =========================
 def insert_data(data):
     with get_conn() as conn:
+
+        for fila in data:
+            if len(fila) != 12:
+                st.error(f"❌ Error en fila: {fila}")
+                return
+
         conn.execute("DELETE FROM embarques")
+
         conn.executemany("""
         INSERT INTO embarques (
             factura, tracking, bl, booking, status,
@@ -114,6 +121,7 @@ def insert_data(data):
             eta, llegada, avance
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, data)
+
         conn.commit()
 
 # =========================
