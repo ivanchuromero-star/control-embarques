@@ -7,18 +7,22 @@ DB_PATH = Path("comercio_embarques.db")
 
 
 # =========================
-# DB
+# CONEXIÓN
 # =========================
 def get_conn():
     return sqlite3.connect(DB_PATH, check_same_thread=False)
 
 
+# =========================
+# BASE DE DATOS
+# =========================
 def init_db():
     with get_conn() as conn:
         conn.execute("""
         CREATE TABLE IF NOT EXISTS embarques (
             embarque_id INTEGER PRIMARY KEY AUTOINCREMENT,
             factura TEXT,
+            tracking TEXT,
             bl TEXT,
             booking TEXT,
             status TEXT,
@@ -28,81 +32,85 @@ def init_db():
             agente_aduanal TEXT,
             ref_agente TEXT,
             naviera TEXT,
+            eta_veracruz TEXT,
+            ven_demoras TEXT,
             pedimento TEXT,
+            contenedores TEXT,
+            sol_impuestos TEXT,
+            pago_impuestos TEXT,
+            carga_gondola TEXT,
+            pantaco TEXT,
+            ven_dem_pantaco TEXT,
             orden_compra TEXT,
-            avance REAL DEFAULT 0,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            transporte_um TEXT,
+            llegada_losifra TEXT,
+            avance REAL DEFAULT 0
         )
         """)
         conn.commit()
 
 
 # =========================
-# NORMALIZADOR DE EXCEL
+# EXCEL → NORMALIZADOR
 # =========================
-def normalize_df(df):
-    df.columns = [str(c).strip().lower() for c in df.columns]
+def seed_from_excel(uploaded_file):
+    conn = get_conn()
 
-    rename_map = {
-        "factura": "factura",
-        "bl": "bl",
-        "booking": "booking",
-        "status": "status",
-        "proveedor": "proveedor",
-        "po": "po",
-        "cliente": "cliente",
-        "agente aduanal": "agente_aduanal",
-        "ref. agente": "ref_agente",
-        "naviera": "naviera",
-        "pedimento": "pedimento",
-        "orden de compra": "orden_compra",
-        "% avance": "avance"
-    }
+    count = pd.read_sql_query(
+        "SELECT COUNT(*) as total FROM embarques",
+        conn
+    ).iloc[0, 0]
 
-    df = df.rename(columns=rename_map)
+    if count > 0:
+        conn.close()
+        return
 
-    for col in rename_map.values():
-        if col not in df.columns:
-            df[col] = ""
+    df = pd.read_excel(uploaded_file, sheet_name=0)
 
-    df["avance"] = pd.to_numeric(df.get("avance", 0), errors="coerce").fillna(0)
+    # normalizar columnas
+    df.columns = df.columns.astype(str).str.strip().str.upper()
 
-    return df[[
-        "factura", "bl", "booking", "status", "proveedor", "po",
-        "cliente", "agente_aduanal", "ref_agente", "naviera",
-        "pedimento", "orden_compra", "avance"
-    ]]
+    def get(col):
+        return df[col] if col in df.columns else ""
 
-
-# =========================
-# INSERT MANUAL
-# =========================
-def insert_manual(data):
-    with get_conn() as conn:
+    for i in range(len(df)):
         conn.execute("""
         INSERT INTO embarques (
-            factura, bl, booking, status, proveedor, po, cliente,
-            agente_aduanal, ref_agente, naviera, pedimento,
-            orden_compra, avance
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, data)
-        conn.commit()
+            factura, tracking, bl, booking, status, proveedor, po, cliente,
+            agente_aduanal, ref_agente, naviera, eta_veracruz,
+            ven_demoras, pedimento, contenedores, sol_impuestos,
+            pago_impuestos, carga_gondola, pantaco, ven_dem_pantaco,
+            orden_compra, transporte_um, llegada_losifra, avance
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            str(get("FACTURA").iloc[i]) if "FACTURA" in df.columns else "",
+            str(get("TRACKING").iloc[i]) if "TRACKING" in df.columns else "",
+            str(get("BL").iloc[i]) if "BL" in df.columns else "",
+            str(get("BOOKING").iloc[i]) if "BOOKING" in df.columns else "",
+            str(get("STATUS").iloc[i]) if "STATUS" in df.columns else "",
+            str(get("PROVEEDOR").iloc[i]) if "PROVEEDOR" in df.columns else "",
+            str(get("PO").iloc[i]) if "PO" in df.columns else "",
+            str(get("CLIENTE").iloc[i]) if "CLIENTE" in df.columns else "",
+            str(get("AGENTE ADUANAL").iloc[i]) if "AGENTE ADUANAL" in df.columns else "",
+            str(get("REF. AGENTE").iloc[i]) if "REF. AGENTE" in df.columns else "",
+            str(get("NAVIERA").iloc[i]) if "NAVIERA" in df.columns else "",
+            str(get("ETA VERACRUZ").iloc[i]) if "ETA VERACRUZ" in df.columns else "",
+            str(get("VEN. DEMORAS").iloc[i]) if "VEN. DEMORAS" in df.columns else "",
+            str(get("PEDIMENTO").iloc[i]) if "PEDIMENTO" in df.columns else "",
+            str(get("CONTENEDORES").iloc[i]) if "CONTENEDORES" in df.columns else "",
+            str(get("SOL. IMPUESTOS").iloc[i]) if "SOL. IMPUESTOS" in df.columns else "",
+            str(get("PAGO IMPUESTOS").iloc[i]) if "PAGO IMPUESTOS" in df.columns else "",
+            str(get("CARGA GONDOLA").iloc[i]) if "CARGA GONDOLA" in df.columns else "",
+            str(get("PANTACO").iloc[i]) if "PANTACO" in df.columns else "",
+            str(get("VEN. DEM. PANTACO").iloc[i]) if "VEN. DEM. PANTACO" in df.columns else "",
+            str(get("ORDEN DE COMPRA").iloc[i]) if "ORDEN DE COMPRA" in df.columns else "",
+            str(get("TRANSPORTE UM").iloc[i]) if "TRANSPORTE UM" in df.columns else "",
+            str(get("LLEGADA LOSIFRA").iloc[i]) if "LLEGADA LOSIFRA" in df.columns else "",
+            float(str(get("% AVANCE").iloc[i]).replace("%","") or 0) if "% AVANCE" in df.columns else 0
+        ))
 
-
-# =========================
-# INSERT EXCEL
-# =========================
-def insert_excel(df):
-    with get_conn() as conn:
-        for _, row in df.iterrows():
-            conn.execute("""
-            INSERT INTO embarques (
-                factura, bl, booking, status, proveedor, po, cliente,
-                agente_aduanal, ref_agente, naviera, pedimento,
-                orden_compra, avance
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, tuple(row))
-        conn.commit()
+    conn.commit()
+    conn.close()
 
 
 # =========================
@@ -120,7 +128,7 @@ def dashboard():
     col2.metric("En tránsito", (df["status"] == "EN TRANSITO").sum())
     col3.metric("Entregados", (df["status"] == "ENTREGADO").sum())
 
-    st.subheader("📊 Embarques")
+    st.subheader("📊 Tabla general")
     st.dataframe(df, use_container_width=True)
 
 
@@ -130,19 +138,12 @@ def dashboard():
 def upload_excel():
     st.subheader("📥 Cargar Excel")
 
-    file = st.file_uploader("Sube archivo Excel", type=["xlsx"])
+    file = st.file_uploader("Sube tu Excel", type=["xlsx"])
 
     if file:
-        try:
-            df = pd.read_excel(file, sheet_name=0)
-            df = normalize_df(df)
-            insert_excel(df)
-
-            st.success("Excel cargado correctamente")
-            st.rerun()
-
-        except Exception as e:
-            st.error(f"Error leyendo Excel: {e}")
+        seed_from_excel(file)
+        st.success("Datos cargados correctamente")
+        st.rerun()
 
 
 # =========================
@@ -151,28 +152,29 @@ def upload_excel():
 def manual_entry():
     st.subheader("✍️ Captura manual")
 
-    with st.form("manual_form"):
+    with st.form("manual"):
         factura = st.text_input("Factura")
+        tracking = st.text_input("Tracking")
         bl = st.text_input("BL")
         booking = st.text_input("Booking")
         status = st.selectbox("Status", ["PENDIENTE", "EN TRANSITO", "ENTREGADO"])
         proveedor = st.text_input("Proveedor")
         po = st.text_input("PO")
         cliente = st.text_input("Cliente")
-        agente = st.text_input("Agente aduanal")
-        ref = st.text_input("Referencia agente")
-        naviera = st.text_input("Naviera")
-        pedimento = st.text_input("Pedimento")
-        oc = st.text_input("Orden de compra")
-        avance = st.number_input("Avance", 0.0, 100.0, 0.0)
 
         submit = st.form_submit_button("Guardar")
 
         if submit:
-            insert_manual((
-                factura, bl, booking, status, proveedor, po, cliente,
-                agente, ref, naviera, pedimento, oc, avance
-            ))
+            with get_conn() as conn:
+                conn.execute("""
+                INSERT INTO embarques (
+                    factura, tracking, bl, booking, status, proveedor, po, cliente
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    factura, tracking, bl, booking, status, proveedor, po, cliente
+                ))
+                conn.commit()
+
             st.success("Guardado correctamente")
             st.rerun()
 
