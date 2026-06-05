@@ -18,9 +18,7 @@ def get_conn():
 # ---------------------------
 def init_db():
     with get_conn() as conn:
-        cur = conn.cursor()
-
-        cur.execute("""
+        conn.execute("""
         CREATE TABLE IF NOT EXISTS embarques (
             embarque_id INTEGER PRIMARY KEY AUTOINCREMENT,
             factura TEXT,
@@ -39,23 +37,11 @@ def init_db():
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
         """)
-
-        cur.execute("""
-        CREATE TABLE IF NOT EXISTS detalle_embarque (
-            detalle_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            embarque_id INTEGER,
-            orden_compra TEXT,
-            sku TEXT,
-            descripcion TEXT,
-            cantidad_embarcada REAL
-        )
-        """)
-
         conn.commit()
 
 
 # ---------------------------
-# CARGA EXCEL (DINÁMICA)
+# CARGA DE EXCEL SEGURA
 # ---------------------------
 def seed_from_excel(uploaded_file):
     conn = get_conn()
@@ -72,24 +58,32 @@ def seed_from_excel(uploaded_file):
     df = pd.read_excel(uploaded_file, sheet_name="EMBARQUES_PRO")
 
     df.columns = [str(c).strip().lower() for c in df.columns]
-
-    # mapeo flexible (ajústalo a tu Excel real)
-    df = df.rename(columns={
-        "factura": "factura",
-        "bl": "bl",
-        "booking": "booking",
-        "status": "status",
-        "proveedor": "proveedor",
-        "po": "po",
-        "cliente": "cliente",
-        "agente aduanal": "agente_aduanal",
-        "orden de compra": "orden_compra",
-        "% avance": "avance"
-    })
-
     df = df.fillna("")
 
-    df.to_sql("embarques", conn, if_exists="append", index=False)
+    for _, row in df.iterrows():
+        conn.execute("""
+            INSERT INTO embarques (
+                factura, bl, booking, status, proveedor, po, cliente,
+                agente_aduanal, ref_agente, naviera, pedimento,
+                orden_compra, avance
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            row.get("factura", ""),
+            row.get("bl", ""),
+            row.get("booking", ""),
+            row.get("status", ""),
+            row.get("proveedor", ""),
+            row.get("po", ""),
+            row.get("cliente", ""),
+            row.get("agente aduanal", ""),
+            row.get("ref. agente", ""),
+            row.get("naviera", ""),
+            row.get("pedimento", ""),
+            row.get("orden de compra", ""),
+            float(row.get("% avance", 0) or 0)
+        ))
+
+    conn.commit()
     conn.close()
 
 
@@ -100,28 +94,27 @@ def dashboard():
     st.title("📦 Control de Embarques")
 
     conn = get_conn()
-
     df = pd.read_sql_query("SELECT * FROM embarques", conn)
 
     col1, col2, col3 = st.columns(3)
 
-    col1.metric("Total embarques", len(df))
+    col1.metric("Total", len(df))
     col2.metric("En tránsito", (df["status"] == "EN TRANSITO").sum())
     col3.metric("Entregados", (df["status"] == "ENTREGADO").sum())
 
-    st.subheader("📊 Últimos embarques")
+    st.subheader("Últimos registros")
     st.dataframe(df.tail(20), use_container_width=True)
 
 
 # ---------------------------
-# CARGA DE EXCEL EN UI
+# CARGA EXCEL UI
 # ---------------------------
 def upload_excel():
     st.subheader("📥 Cargar Excel")
 
     file = st.file_uploader("Sube tu archivo Excel", type=["xlsx"])
 
-    if file:
+    if file is not None:
         seed_from_excel(file)
         st.success("Datos cargados correctamente")
         st.rerun()
@@ -139,9 +132,11 @@ def search():
         conn = get_conn()
         df = pd.read_sql_query("SELECT * FROM embarques", conn)
 
-        result = df[df.astype(str).apply(
-            lambda x: x.str.contains(q, case=False, na=False)
-        ).any(axis=1)]
+        result = df[
+            df.astype(str).apply(
+                lambda x: x.str.contains(q, case=False, na=False)
+            ).any(axis=1)
+        ]
 
         st.dataframe(result, use_container_width=True)
 
@@ -150,12 +145,12 @@ def search():
 # APP PRINCIPAL
 # ---------------------------
 def main():
-    st.set_page_config(page_title="Embarques", layout="wide")
+    st.set_page_config(page_title="Control Embarques", layout="wide")
 
     init_db()
 
     menu = st.sidebar.radio(
-        "📌 Menú",
+        "Menú",
         ["Dashboard", "Cargar Excel", "Buscador"]
     )
 
