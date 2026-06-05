@@ -3,7 +3,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-DB_PATH = Path("embarques.db")
+DB_PATH = "embarques.db"
 
 # =========================
 # DB
@@ -27,14 +27,11 @@ def init_db():
             cliente TEXT,
             naviera TEXT,
             eta TEXT,
-            pedimento TEXT,
-            contenedores TEXT,
             llegada TEXT,
             avance REAL
         )
         """)
         conn.commit()
-
 
 # =========================
 # HELPERS
@@ -50,20 +47,37 @@ def parse_avance(val):
     except:
         return 0.0
 
-
 # =========================
-# LOAD EXCEL (adaptado a tu archivo)
+# 🔥 FIX REAL DEL EXCEL
 # =========================
 def load_excel(file):
-    df = pd.read_excel(file)
+    # Leer TODAS las filas
+    df_raw = pd.read_excel(file, header=None)
+
+    # Buscar fila donde empieza la tabla (donde aparece FACTURA)
+    start_row = None
+    for i, row in df_raw.iterrows():
+        if row.astype(str).str.contains("FACTURA").any():
+            start_row = i
+            break
+
+    if start_row is None:
+        st.error("No se encontró la estructura del Excel")
+        return []
+
+    # Leer desde ahí
+    df = pd.read_excel(file, header=start_row)
 
     df.columns = df.columns.astype(str).str.strip().str.upper()
-
     df = df.fillna("")
 
     data = []
 
     for _, row in df.iterrows():
+        # Evitar filas basura
+        if str(row.get("FACTURA")).strip() == "":
+            continue
+
         data.append((
             clean(row.get("FACTURA")),
             clean(row.get("TRACKING")),
@@ -75,14 +89,11 @@ def load_excel(file):
             clean(row.get("CLIENTE")),
             clean(row.get("NAVIERA")),
             clean(row.get("ETA VERACRUZ")),
-            clean(row.get("PEDIMENTO")),
-            clean(row.get("CONTENEDORES")),
             clean(row.get("LLEGADA LOSIFRA")),
             parse_avance(row.get("% AVANCE"))
         ))
 
     return data
-
 
 # =========================
 # INSERT
@@ -94,34 +105,25 @@ def insert_data(data):
         INSERT INTO embarques (
             factura, tracking, bl, booking, status,
             proveedor, po, cliente, naviera,
-            eta, pedimento, contenedores,
-            llegada, avance
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            eta, llegada, avance
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, data)
         conn.commit()
-
-
-# =========================
-# EXPORT
-# =========================
-def download_excel(df):
-    return df.to_excel(index=False, engine='openpyxl')
-
 
 # =========================
 # UI
 # =========================
 def main():
-    st.set_page_config(page_title="Sistema de Embarques PRO", layout="wide")
+    st.set_page_config(page_title="Embarques PRO", layout="wide")
 
     init_db()
 
     st.title("📦 Sistema de Embarques PRO")
 
     menu = st.sidebar.radio("Menú", [
-        "📊 Dashboard",
-        "🔍 Búsqueda",
-        "📂 Cargar Excel"
+        "Dashboard",
+        "Búsqueda",
+        "Cargar Excel"
     ])
 
     conn = get_conn()
@@ -130,49 +132,64 @@ def main():
     # =========================
     # DASHBOARD
     # =========================
-    if menu == "📊 Dashboard":
-
-        st.subheader("KPIs")
+    if menu == "Dashboard":
 
         if not df.empty:
             col1, col2, col3, col4 = st.columns(4)
 
-            total = len(df)
-            liberados = len(df[df["status"] == "LIBERADOS"])
-            pendientes = len(df[df["status"] == "PENDIENTE"])
-            avance = df["avance"].mean()
-
-            col1.metric("Total", total)
-            col2.metric("Liberados", liberados)
-            col3.metric("Pendientes", pendientes)
-            col4.metric("Avance Promedio", f"{avance:.1f}%")
+            col1.metric("Total", len(df))
+            col2.metric("Liberados", len(df[df["status"] == "LIBERADOS"]))
+            col3.metric("Pendientes", len(df[df["status"] == "PENDIENTE"]))
+            col4.metric("Avance Promedio", f"{df['avance'].mean():.1f}%")
 
         st.divider()
 
-        # ALERTAS
-        st.subheader("Alertas")
+        # SEMÁFORO
+        def color_avance(val):
+            if val >= 80:
+                return "background-color: #c6efce"
+            elif val >= 50:
+                return "background-color: #ffeb9c"
+            return "background-color: #ffc7ce"
 
-        atrasados = df[df["avance"] < 50]
-        st.write(f"🔴 Registros con bajo avance: {len(atrasados)}")
+        if not df.empty:
+            st.dataframe(df.style.applymap(color_avance, subset=["avance"]),
+                         use_container_width=True)
 
-        st.divider()
-
-        # TABLA
-        st.subheader("Tabla")
-        st.dataframe(df, use_container_width=True)
-
-        # DESCARGA
-        st.download_button(
-            "⬇️ Descargar Excel",
-            data=df.to_csv(index=False),
-            file_name="embarques.csv",
-            mime="text/csv"
-        )
+            # DESCARGA
+            csv = df.to_csv(index=False).encode("utf-8")
+            st.download_button("⬇️ Descargar Excel", csv, "embarques.csv", "text/csv")
 
     # =========================
     # BUSQUEDA
     # =========================
-    elif menu == "🔍 Búsqueda":
+    elif menu == "Búsqueda":
 
-        st.subheader("Búsqueda rápida")
+        query = st.text_input("Buscar")
 
+        if query:
+            df_filtrado = df[df.apply(
+                lambda row: query.lower() in str(row).lower(), axis=1
+            )]
+            st.dataframe(df_filtrado)
+
+    # =========================
+    # CARGA
+    # =========================
+    elif menu == "Cargar Excel":
+
+        file = st.file_uploader("Sube el Excel", type=["xlsx"])
+
+        if file:
+            data = load_excel(file)
+
+            st.write(f"Registros detectados: {len(data)}")
+
+            if st.button("Confirmar carga"):
+                insert_data(data)
+                st.success("✅ Carga exitosa")
+                st.rerun()
+
+# =========================
+if __name__ == "__main__":
+    main()
