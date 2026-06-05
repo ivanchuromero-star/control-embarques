@@ -1,6 +1,15 @@
 import pandas as pd
 import streamlit as st
 
+st.set_page_config(page_title="Embarques PRO", layout="wide")
+
+# =========================
+# CACHE GLOBAL
+# =========================
+@st.cache_data
+def guardar_df(df):
+    return df
+
 # =========================
 # HELPERS
 # =========================
@@ -35,7 +44,7 @@ def load_excel(file):
             break
 
     if start_row is None:
-        st.error("❌ No se encontró la tabla")
+        st.error("❌ No se encontró tabla")
         return pd.DataFrame()
 
     df = pd.read_excel(file, header=start_row)
