@@ -17,10 +17,9 @@ def get_conn():
 # BASE DE DATOS
 # =========================
 def init_db():
-    with get_conn() as conn:
+with get_conn() as conn:
     conn.execute("DELETE FROM embarques")
-    
-        conn.commit()
+    conn.commit()
 
 
 # =========================
