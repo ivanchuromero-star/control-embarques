@@ -17,10 +17,27 @@ def get_conn():
 # BASE DE DATOS
 # =========================
 def init_db():
-with get_conn() as conn:
-    conn.execute("DELETE FROM embarques")
-    conn.commit()
-
+    with get_conn() as conn:
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS embarques (
+            embarque_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            factura TEXT,
+            tracking TEXT,
+            bl TEXT,
+            booking TEXT,
+            status TEXT,
+            proveedor TEXT,
+            po TEXT,
+            cliente TEXT,
+            agente_aduanal TEXT,
+            ref_agente TEXT,
+            naviera TEXT,
+            pedimento TEXT,
+            orden_compra TEXT,
+            avance REAL
+        )
+        """)
+        conn.commit()
 
 # =========================
 # EXCEL → NORMALIZADOR
