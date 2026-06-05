@@ -79,19 +79,19 @@ def load_excel(file):
             continue
 
         data.append((
-            clean(row.get("FACTURA")),
-            clean(row.get("TRACKING")),
-            clean(row.get("BL")),
-            clean(row.get("BOOKING")),
-            clean(row.get("STATUS")),
-            clean(row.get("PROVEEDOR")),
-            clean(row.get("PO")),
-            clean(row.get("CLIENTE")),
-            clean(row.get("NAVIERA")),
-            clean(row.get("ETA VERACRUZ")),
-            clean(row.get("LLEGADA LOSIFRA")),
-            parse_avance(row.get("% AVANCE"))
-        ))
+    clean(row.get("FACTURA")),          # 1
+    clean(row.get("TRACKING")),         # 2
+    clean(row.get("BL")),               # 3
+    clean(row.get("BOOKING")),          # 4
+    clean(row.get("STATUS")),           # 5
+    clean(row.get("PROVEEDOR")),        # 6
+    clean(row.get("PO")),               # 7
+    clean(row.get("CLIENTE")),          # 8
+    clean(row.get("NAVIERA")),          # 9
+    clean(row.get("ETA VERACRUZ")),     # 10
+    clean(row.get("LLEGADA LOSIFRA")),  # 11
+    parse_avance(row.get("% AVANCE"))   # 12 ✅
+))
 
     return data
 
