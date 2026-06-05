@@ -5,7 +5,6 @@ import streamlit as st
 
 DB_PATH = Path("embarques.db")
 
-
 # =========================
 # DB
 # =========================
@@ -26,11 +25,11 @@ def init_db():
             proveedor TEXT,
             po TEXT,
             cliente TEXT,
-            agente_aduanal TEXT,
-            ref_agente TEXT,
             naviera TEXT,
+            eta TEXT,
             pedimento TEXT,
-            orden_compra TEXT,
+            contenedores TEXT,
+            llegada TEXT,
             avance REAL
         )
         """)
@@ -38,34 +37,48 @@ def init_db():
 
 
 # =========================
-# LIMPIEZA EXCEL
+# HELPERS
+# =========================
+def clean(val):
+    return "" if pd.isna(val) else str(val).strip()
+
+
+def parse_avance(val):
+    try:
+        val = str(val).replace("%", "").strip()
+        return float(val) if val else 0.0
+    except:
+        return 0.0
+
+
+# =========================
+# LOAD EXCEL (adaptado a tu archivo)
 # =========================
 def load_excel(file):
-    df = pd.read_excel(file, sheet_name=0)
+    df = pd.read_excel(file)
 
     df.columns = df.columns.astype(str).str.strip().str.upper()
 
-    def col(name):
-        return df[name] if name in df.columns else pd.Series([""] * len(df))
+    df = df.fillna("")
 
     data = []
 
-    for i in range(len(df)):
+    for _, row in df.iterrows():
         data.append((
-            str(col("FACTURA").iloc[i]),
-            str(col("TRACKING").iloc[i]),
-            str(col("BL").iloc[i]),
-            str(col("BOOKING").iloc[i]),
-            str(col("STATUS").iloc[i]),
-            str(col("PROVEEDOR").iloc[i]),
-            str(col("PO").iloc[i]),
-            str(col("CLIENTE").iloc[i]),
-            str(col("AGENTE ADUANAL").iloc[i]),
-            str(col("REF. AGENTE").iloc[i]),
-            str(col("NAVIERA").iloc[i]),
-            str(col("PEDIMENTO").iloc[i]),
-            str(col("ORDEN DE COMPRA").iloc[i]),
-            float(str(col("% AVANCE").iloc[i] or 0).replace("%","0"))
+            clean(row.get("FACTURA")),
+            clean(row.get("TRACKING")),
+            clean(row.get("BL")),
+            clean(row.get("BOOKING")),
+            clean(row.get("STATUS")),
+            clean(row.get("PROVEEDOR")),
+            clean(row.get("PO")),
+            clean(row.get("CLIENTE")),
+            clean(row.get("NAVIERA")),
+            clean(row.get("ETA VERACRUZ")),
+            clean(row.get("PEDIMENTO")),
+            clean(row.get("CONTENEDORES")),
+            clean(row.get("LLEGADA LOSIFRA")),
+            parse_avance(row.get("% AVANCE"))
         ))
 
     return data
@@ -76,45 +89,90 @@ def load_excel(file):
 # =========================
 def insert_data(data):
     with get_conn() as conn:
+        conn.execute("DELETE FROM embarques")
         conn.executemany("""
         INSERT INTO embarques (
-            factura, tracking, bl, booking, status, proveedor, po, cliente,
-            agente_aduanal, ref_agente, naviera, pedimento,
-            orden_compra, avance
+            factura, tracking, bl, booking, status,
+            proveedor, po, cliente, naviera,
+            eta, pedimento, contenedores,
+            llegada, avance
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, data)
         conn.commit()
 
 
 # =========================
+# EXPORT
+# =========================
+def download_excel(df):
+    return df.to_excel(index=False, engine='openpyxl')
+
+
+# =========================
 # UI
 # =========================
 def main():
-    st.set_page_config(page_title="Embarques Limpio", layout="wide")
+    st.set_page_config(page_title="Sistema de Embarques PRO", layout="wide")
 
     init_db()
 
-    st.title("📦 Sistema de Embarques (Limpio)")
+    st.title("📦 Sistema de Embarques PRO")
 
-    menu = st.sidebar.radio("Menú", ["Dashboard", "Cargar Excel"])
+    menu = st.sidebar.radio("Menú", [
+        "📊 Dashboard",
+        "🔍 Búsqueda",
+        "📂 Cargar Excel"
+    ])
 
-    if menu == "Dashboard":
-        conn = get_conn()
-        df = pd.read_sql_query("SELECT * FROM embarques", conn)
+    conn = get_conn()
+    df = pd.read_sql_query("SELECT * FROM embarques", conn)
 
-        st.metric("Total registros", len(df))
+    # =========================
+    # DASHBOARD
+    # =========================
+    if menu == "📊 Dashboard":
+
+        st.subheader("KPIs")
+
+        if not df.empty:
+            col1, col2, col3, col4 = st.columns(4)
+
+            total = len(df)
+            liberados = len(df[df["status"] == "LIBERADOS"])
+            pendientes = len(df[df["status"] == "PENDIENTE"])
+            avance = df["avance"].mean()
+
+            col1.metric("Total", total)
+            col2.metric("Liberados", liberados)
+            col3.metric("Pendientes", pendientes)
+            col4.metric("Avance Promedio", f"{avance:.1f}%")
+
+        st.divider()
+
+        # ALERTAS
+        st.subheader("Alertas")
+
+        atrasados = df[df["avance"] < 50]
+        st.write(f"🔴 Registros con bajo avance: {len(atrasados)}")
+
+        st.divider()
+
+        # TABLA
+        st.subheader("Tabla")
         st.dataframe(df, use_container_width=True)
 
-    elif menu == "Cargar Excel":
-        file = st.file_uploader("Sube Excel", type=["xlsx"])
+        # DESCARGA
+        st.download_button(
+            "⬇️ Descargar Excel",
+            data=df.to_csv(index=False),
+            file_name="embarques.csv",
+            mime="text/csv"
+        )
 
-        if file:
-            data = load_excel(file)
-            insert_data(data)
+    # =========================
+    # BUSQUEDA
+    # =========================
+    elif menu == "🔍 Búsqueda":
 
-            st.success("Datos cargados correctamente")
-            st.rerun()
+        st.subheader("Búsqueda rápida")
 
-
-if __name__ == "__main__":
-    main()
