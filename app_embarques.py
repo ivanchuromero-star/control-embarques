@@ -13,8 +13,11 @@ def get_conn():
 
 def init_db():
     with get_conn() as conn:
+        # 🔥 BORRA LA TABLA COMPLETAMENTE (FIX CLAVE)
+        conn.execute("DROP TABLE IF EXISTS embarques")
+
         conn.execute("""
-        CREATE TABLE IF NOT EXISTS embarques (
+        CREATE TABLE embarques (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             factura TEXT,
             tracking TEXT,
