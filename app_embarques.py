@@ -75,7 +75,7 @@ def init_db():
     conn.close()
 
 
-def seed_from_excel(file_path):
+def seed_from_excel('OPERACIONES COMERCIO.xlsx'):
     if not Path(file_path).exists():
         return
     conn = get_conn()
