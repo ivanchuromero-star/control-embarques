@@ -153,8 +153,7 @@ def main():
             return "background-color: #ffc7ce"
 
         if not df.empty:
-            st.dataframe(df.style.applymap(color_avance, subset=["avance"]),
-                         use_container_width=True)
+            st.dataframe(df, use_container_width=True)
 
             # DESCARGA
             csv = df.to_csv(index=False).encode("utf-8")
